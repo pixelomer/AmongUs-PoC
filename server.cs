@@ -20,6 +20,13 @@ namespace HazelTestServer
             // it. This means that there will still be left-overs from previous
             // packets. This is what the client leaks.
             //
+
+            //
+            // To simulate a realistic server, this code creates and recycles 10
+            // message readers. This causes the reader pool to fill up with readers
+            // that have left-over data in their buffers. In a real server, these
+            // readers would contain data from old packets.
+            //
             {
                 const int readerCount = 10;
                 List<MessageReader> readers = new List<MessageReader>(readerCount);
